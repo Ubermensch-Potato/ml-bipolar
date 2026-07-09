@@ -197,11 +197,25 @@ write folds.csv, predictions.csv, summary.csv                 [separate process 
 ```
 df = read(predictions.csv)
 for (model, strat) in groupby:
-    per_subject = group.by(subject).agg(prob=mean, pred=majority_vote)   [5 repeats -> 1]
-    perf = evaluate_with_CI(per_subject)                                 [point + 95% CI]
-    rows.append(model, strat, perf)
+    per_subject = group.by(subject).agg(prob=mean, pred=majority_vote)   [5 repeats -> 1, N=160]
+    tn, fp, fn, tp = confusion_matrix(y, pred)
+    sens = wilson(tp, tp+fn); spec = wilson(tn, tn+fp); acc = wilson(tp+tn, N)   [Wilson score 95% CI]
+    auc  = bootstrap_auc(y, prob, n_boot=2000, seed=67)                          [percentile 95% CI]
+    rows.append(model, strat, sens, spec, acc, auc)                              [each = point, lo, hi]
 write ci.csv
+
+wilson(k, n, z=1.96):                                    [closed-form CI for a proportion k/n]
+    p = k/n
+    center = (p + z^2/2n) / (1 + z^2/n)
+    half   = z * sqrt(p(1-p)/n + z^2/4n^2) / (1 + z^2/n)
+    return p, clip(center - half), clip(center + half)
+
+bootstrap_auc(y, prob, n_boot, seed):                    [nonparametric CI for AUC]
+    for i in 1..n_boot: resample N subjects with replacement; collect roc_auc(y*, prob*)
+    return roc_auc(y, prob), percentile(2.5%), percentile(97.5%)
 ```
+> `evaluate_with_CI` = **Wilson score interval** for the proportions (sens / spec / acc)
+> and **bootstrap percentile CI** for AUC — both at the subject level (N=160).
 
 ### Shared invariants
 ```
