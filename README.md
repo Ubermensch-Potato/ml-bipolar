@@ -151,7 +151,69 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 
 ---
 
-## 6. Outputs (`outputs/`)
+## 6. Pseudocode
+
+`perf` denotes the bundle of performance metrics (sens / spec / acc / auc); the concrete
+metrics are encapsulated in `evaluate` / `evaluate_with_CI`.
+
+### `train/run_models.py`
+```
+X, y = data_load(); seed = 67
+for model in models:
+    for strat in strategies[model]:
+        for (trainval, test) in RepeatedStratifiedKFold(5, 5).split(X, y):
+            tr, va = stratified_split(trainval, 0.2)
+            hp   = tune_hp(model, strat, tr, va, objective)
+            pipe = build(model, strat, hp).fit(X[tr], y[tr])
+            tau  = select_threshold(y[va], predict(va))
+            prob = predict(test); pred = prob >= tau
+            perf = evaluate(y[test], prob, pred)
+            folds.append(model, strat, repeat, fold, tau, perf, hp)
+            for subject in test: preds.append(model, strat, subject, repeat, fold, prob, pred, y_true)
+summary = folds.groupby(model, strat).mean(perf)
+write folds.csv, predictions.csv, summary.csv
+```
+
+### `train/run_tabpfn.py`
+```
+clf = TabPFNClassifier(ckpt, cpu)                              [loaded ONCE]
+for strat in strategies:
+    for (trainval, test) in RepeatedStratifiedKFold(5, 5).split(X, y):
+        tr, va = stratified_split(trainval, 0.2)
+        Xtr, Xva, Xte = preprocess.fit(tr).transform(tr, va, test)
+        if strat != builtin: Xtr, ytr = sampler.fit_resample(Xtr, ytr)
+        hp  = tune_tabpfn(clf, Xtr, Xva, objective)            [set_params only]
+        clf.set_params(hp).fit(Xtr, ytr)
+        tau = select_threshold(y[va], clf.predict(Xva))
+        prob = clf.predict(Xte); pred = prob >= tau
+        perf = evaluate(y[test], prob, pred)
+        folds.append(TabPFN, strat, repeat, fold, tau, perf, hp)
+        for subject in test: preds.append(TabPFN, strat, subject, repeat, fold, prob, pred, y_true)
+summary = folds.groupby(strat).mean(perf)
+write folds.csv, predictions.csv, summary.csv                 [separate process from XGBoost]
+```
+
+### `eval/run_ci.py`
+```
+df = read(predictions.csv)
+for (model, strat) in groupby:
+    per_subject = group.by(subject).agg(prob=mean, pred=majority_vote)   [5 repeats -> 1]
+    perf = evaluate_with_CI(per_subject)                                 [point + 95% CI]
+    rows.append(model, strat, perf)
+write ci.csv
+```
+
+### Shared invariants
+```
+fit(preprocess, sampler, HP, threshold) uses TRAIN/VALID only; TEST predicted independently -> no leakage
+fold: perf -> folds.csv | raw prob -> predictions.csv | mean -> summary.csv
+run_ci: recompute subject-level perf + CI from predictions.csv probs only -> ci.csv
+seed = 67 everywhere -> reproducible
+```
+
+---
+
+## 7. Outputs (`outputs/`)
 
 | file | contents |
 |------|----------|
@@ -162,7 +224,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 
 ---
 
-## 7. Reproducibility
+## 8. Reproducibility
 
 - **seed 67** everywhere: `random_state` of LR (saga) / XGBoost / BalancedRF, Optuna
   `TPESampler`, SMOTE/ADASYN/SMOTE-ENN, and the bootstrap `default_rng`.
@@ -172,7 +234,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 
 ---
 
-## 8. Notes
+## 9. Notes
 
 - **`KMP_DUPLICATE_LIB_OK=TRUE`** — avoids a macOS segfault when XGBoost (libomp) and torch
   are loaded in the same process.
