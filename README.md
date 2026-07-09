@@ -83,24 +83,25 @@ cd ml-bipolar
 export KMP_DUPLICATE_LIB_OK=TRUE      # avoids the XGBoost(libomp)+torch macOS segfault
 
 # 1) Tabular models — per-fold Optuna (unbiased 5x5), one run per objective
-for OBJ in sens_at_spec spec_at_sens; do
-  python -m train.run_models \
-    --models LR_L1 LR_L2 XGBoost BalancedRF \
-    --repeats 5 --trials 20 --objective $OBJ --prefix models_$OBJ
-done
+python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
+  --repeats 5 --trials 20 --objective sens_at_spec --prefix models_sens_at_spec
+python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
+  --repeats 5 --trials 20 --objective spec_at_sens --prefix models_spec_at_sens
 
 # 2) TabPFN-3 — SEPARATE process (same process as XGBoost segfaults, libomp clash)
-for OBJ in sens_at_spec spec_at_sens; do
-  python -m train.run_tabpfn \
-    --strategies builtin smote adasyn smote_enn \
-    --trials 20 --objective $OBJ --prefix tabpfn_$OBJ
-done
+python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
+  --trials 20 --objective sens_at_spec --prefix tabpfn_sens_at_spec
+python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
+  --trials 20 --objective spec_at_sens --prefix tabpfn_spec_at_sens
 
-# 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap) for every predictions file
-for P in models_sens_at_spec models_spec_at_sens tabpfn_sens_at_spec tabpfn_spec_at_sens; do
-  python -m eval.run_ci --pred outputs/${P}_predictions.csv
-done
+# 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap)
+python -m eval.run_ci --pred outputs/models_sens_at_spec_predictions.csv
+python -m eval.run_ci --pred outputs/models_spec_at_sens_predictions.csv
+python -m eval.run_ci --pred outputs/tabpfn_sens_at_spec_predictions.csv
+python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 ```
+> Later, once performance is in, keep only **one** objective — run just the two
+> `*_sens_at_spec` (or `*_spec_at_sens`) commands plus their two CI lines.
 > Direct execution (`python train/run_models.py ...`) also works — each script adds
 > `ml-bipolar/` to `sys.path`.
 >
