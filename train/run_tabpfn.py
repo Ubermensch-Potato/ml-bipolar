@@ -68,7 +68,7 @@ def tune_tabpfn(clf, Xtr, ytr, Xva, yva, seed, n_trials, obj="sens_at_spec"):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--trials", type=int, default=20, help="per-fold Optuna trials (0 = defaults only)")
+    ap.add_argument("--trials", type=int, default=12, help="per-fold Optuna trials (0 = defaults only)")
     ap.add_argument("--tune", dest="tune", action="store_true", default=True)
     ap.add_argument("--no-tune", dest="tune", action="store_false")
     ap.add_argument("--prefix", default="tabpfn_tuned")

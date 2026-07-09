@@ -84,15 +84,15 @@ export KMP_DUPLICATE_LIB_OK=TRUE      # avoids the XGBoost(libomp)+torch macOS s
 
 # 1) Tabular models — per-fold Optuna (unbiased 5x5), one run per objective
 python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
-  --repeats 5 --trials 20 --objective sens_at_spec --prefix models_sens_at_spec
+  --repeats 5 --trials 12 --objective sens_at_spec --prefix models_sens_at_spec
 python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
-  --repeats 5 --trials 20 --objective spec_at_sens --prefix models_spec_at_sens
+  --repeats 5 --trials 12 --objective spec_at_sens --prefix models_spec_at_sens
 
 # 2) TabPFN-3 — SEPARATE process (same process as XGBoost segfaults, libomp clash)
 python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
-  --trials 20 --objective sens_at_spec --prefix tabpfn_sens_at_spec
+  --trials 12 --objective sens_at_spec --prefix tabpfn_sens_at_spec
 python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
-  --trials 20 --objective spec_at_sens --prefix tabpfn_spec_at_sens
+  --trials 12 --objective spec_at_sens --prefix tabpfn_spec_at_sens
 
 # 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap)
 python -m eval.run_ci --pred outputs/models_sens_at_spec_predictions.csv
@@ -113,7 +113,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 |--------|---------|-------------|
 | `--models` | all 4 | which models (run TabPFN via `train/run_tabpfn.py`) |
 | `--repeats` | 5 | outer-CV repeats (k=5 fixed → 5×5) |
-| `--trials` | 20 | per-fold Optuna trials (0 = no tuning) |
+| `--trials` | 12 | per-fold Optuna trials (0 = no tuning) |
 | `--objective` | `sens_at_spec` | `sens_at_spec` (sens@spec≥0.5) / `spec_at_sens` (spec@sens≥0.75, matches the threshold rule) / `accuracy` (sophie's original) |
 | `--no-tune` | — | run with fixed HP |
 | `--prefix` | `models` | output-file prefix |
@@ -122,7 +122,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 | option | default | description |
 |--------|---------|-------------|
 | `--strategies` | `builtin` | any of `builtin` / `smote` / `adasyn` / `smote_enn` |
-| `--trials` | 20 | per-fold Optuna trials over TabPFN inference settings |
+| `--trials` | 12 | per-fold Optuna trials over TabPFN inference settings |
 | `--objective` | `sens_at_spec` | `sens_at_spec` or `spec_at_sens` |
 | `--raw` | off | feed RAW features + `categorical_features_indices` (no one-hot) |
 | `--no-tune` | — | defaults only (no tuning) |
