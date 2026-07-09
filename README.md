@@ -74,26 +74,38 @@ loads this local file via `model_path`, so **no token is needed at run time**.
 
 ## 4. Running
 
-Run from `ml_code/` in **`python -m` module form** (so package imports resolve).
+Run from `ml-bipolar/` in **`python -m` module form** (so package imports resolve).
+This is the **exact sequence used to produce the reported results** — two objectives
+(`sens_at_spec`, `spec_at_sens`), each written under a per-objective prefix.
 
 ```bash
-cd ml_code
+cd ml-bipolar
+export KMP_DUPLICATE_LIB_OK=TRUE      # avoids the XGBoost(libomp)+torch macOS segfault
 
-# 1) Tabular models — per-fold Optuna tuning (objective sens@spec>=0.5), unbiased 5x5
-KMP_DUPLICATE_LIB_OK=TRUE python -m train.run_models \
-  --models LR_L1 LR_L2 XGBoost BalancedRF \
-  --repeats 5 --trials 20 --objective sens_at_spec --prefix models_tuned
+# 1) Tabular models — per-fold Optuna (unbiased 5x5), one run per objective
+for OBJ in sens_at_spec spec_at_sens; do
+  python -m train.run_models \
+    --models LR_L1 LR_L2 XGBoost BalancedRF \
+    --repeats 5 --trials 20 --objective $OBJ --prefix models_$OBJ
+done
 
-# 2) TabPFN-3 — SEPARATE process (in the same process as XGBoost it segfaults, libomp clash)
-KMP_DUPLICATE_LIB_OK=TRUE python -m train.run_tabpfn \
-  --strategies builtin smote adasyn smote_enn --trials 20 --objective sens_at_spec --prefix tabpfn_tuned
+# 2) TabPFN-3 — SEPARATE process (same process as XGBoost segfaults, libomp clash)
+for OBJ in sens_at_spec spec_at_sens; do
+  python -m train.run_tabpfn \
+    --strategies builtin smote adasyn smote_enn \
+    --trials 20 --objective $OBJ --prefix tabpfn_$OBJ
+done
 
-# 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap)
-python -m eval.run_ci --pred outputs/models_tuned_predictions.csv
-python -m eval.run_ci --pred outputs/tabpfn_tuned_predictions.csv
+# 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap) for every predictions file
+for P in models_sens_at_spec models_spec_at_sens tabpfn_sens_at_spec tabpfn_spec_at_sens; do
+  python -m eval.run_ci --pred outputs/${P}_predictions.csv
+done
 ```
 > Direct execution (`python train/run_models.py ...`) also works — each script adds
-> `ml_code/` to `sys.path`.
+> `ml-bipolar/` to `sys.path`.
+>
+> This produces, under `outputs/`, one `{summary,folds,predictions,ci}.csv` set per prefix:
+> `models_sens_at_spec_*`, `models_spec_at_sens_*`, `tabpfn_sens_at_spec_*`, `tabpfn_spec_at_sens_*`.
 
 ### `train/run_models.py` options
 | option | default | description |
