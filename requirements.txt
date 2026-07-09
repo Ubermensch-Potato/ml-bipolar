@@ -1,0 +1,21 @@
+# ml_code — tabular ML baselines (LR / XGBoost / BalancedRF / TabPFN) + CI
+# unbiased 5x5 CV, seed 67. Pinned to the versions this code was validated on.
+# Python 3.11
+
+# --- core ---
+numpy==2.4.4
+pandas==3.0.2
+scipy==1.17.1
+scikit-learn==1.8.0
+pyyaml==6.0.3
+openpyxl==3.1.5            # read dataset .xlsx
+
+# --- models / imbalance / tuning ---
+imbalanced-learn==0.14.1  # SMOTE / ADASYN / SMOTE-ENN / BalancedRandomForest
+xgboost==3.2.0
+optuna==4.9.0             # per-fold HP tuning
+
+# --- TabPFN-3 (run_tabpfn.py) ---
+tabpfn==8.0.8
+torch==2.11.0
+huggingface-hub==1.14.0   # download the gated tabpfn_3 checkpoint

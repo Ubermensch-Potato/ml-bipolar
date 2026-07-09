@@ -1,0 +1,327 @@
+# =============================================================================
+# LogReg1_BPD_SMOTEENN pipeline configuration
+# Collects every parameter that was hardcoded in the notebook
+# (LogReg1_BPD_SMOTEENN.ipynb).
+# =============================================================================
+
+seed: 67   # SEED / random_state — global reproducibility
+
+data:
+  # Local data path (instead of the Colab Drive path). Absolute or relative.
+  path: /Users/spinai_dev/Desktop/TIM/GunAhn/QASIM/Bipolar-LLM/dataset/bipolar_dataset.xlsx
+  label_column: bpdp_10years          # 'bpdp_4years' or 'bpdp_10years'
+  is_binary_classification: true
+  nan_subject_level_threshold: 0.3    # drop a subject if >30% of its features are missing
+  nan_feature_level_threshold: 0.3    # drop a feature if >30% of subjects are missing it
+
+split:
+  test_size: 0.3        # train_test_split test_size (stratify=y)
+
+sampler:
+  method: smote_enn
+  smote_param:
+    sampling_strategy: 0.7
+    k_neighbors: 5
+
+model:                  # LogisticRegression fixed params (C is searched by Optuna)
+  penalty: l1
+  solver: saga
+  max_iter: 1000
+  class_weight: balanced
+  c_override: null      # if set (e.g. 1.0457), skip Optuna and use this C directly
+
+optuna:
+  n_trials: 100
+  direction: maximize
+  metric: accuracy      # CV metric the objective maximizes
+  c_low: 0.0001         # C search lower bound (log uniform)
+  c_high: 10.0          # C search upper bound
+  cv_splits: 5          # StratifiedKFold n_splits
+  pruner_warmup: 3      # MedianPruner n_warmup_steps
+
+cv:                     # final out-of-fold prediction scheme (recorded per-prediction)
+  n_splits: 5           # StratifiedKFold folds; repeat 0 reproduces the single-pass result
+  n_repeats: 1          # set >1 for RepeatedStratifiedKFold -> n_repeats predictions per subject
+
+calibration:
+  method: sigmoid       # CalibratedClassifierCV method
+
+threshold:
+  min_target_sensitivity: 0.75   # maximize specificity at/above this sensitivity, else Youden's J
+  fixed: null                    # if set (e.g. 0.6102), use this threshold directly instead of selecting
+
+evaluation:
+  bootstrap_n: 1000     # bootstrap resamples for the AUC confidence interval
+  confidence: 0.95
+
+output:
+  dir: outputs                       # relative to py_codes/
+  predictions_csv: logreg_subject_predictions.csv  # per-prediction table for paired comparison
+  save_figures: true
+  show_figures: false   # if true, call plt.show() (for interactive runs)
+
+# -----------------------------------------------------------------------------
+# Column type definitions (from the data dictionary). CustomPreprocessor routes
+# each type accordingly. Columns ending in _4years / _10years are already
+# dropped in data_load, so even if listed here they are ignored during
+# preprocessing (only columns present in X are used).
+# -----------------------------------------------------------------------------
+columns:
+  meta:
+    - id
+    - famid
+
+  exclusion:
+    - saic6_10years
+    - saic6_4years
+    - saic6_baseline
+    - saic7_10years
+    - saic7_4years
+    - saic7_baseline
+
+  binary:
+    - s_bg
+    - sex
+    - fhx_rgrdp_baseline
+    - fhx_rgrdp_4years
+    - fhx_rgrdp_10years
+    - fhx_spclp_baseline
+    - fhx_spclp_4years
+    - fhx_spclp_10years
+    - fhx_exhpp_baseline
+    - fhx_exhpp_4years
+    - fhx_exhpp_10years
+    - fhx_mddp_baseline
+    - fhx_mddp_4years
+    - fhx_mddp_10years
+    - fhx_alabp_baseline
+    - fhx_alabp_4years
+    - fhx_alabp_10years
+    - fhx_aldpp_baseline
+    - fhx_aldpp_4years
+    - fhx_aldpp_10years
+    - fhx_sbabp_baseline
+    - fhx_sbabp_4years
+    - fhx_sbabp_10years
+    - fhx_sbdpp_baseline
+    - fhx_sbdpp_4years
+    - fhx_sbdpp_10years
+    - fhx_panp_baseline
+    - fhx_panp_4years
+    - fhx_panp_10years
+    - fhx_agorp_baseline
+    - fhx_agorp_4years
+    - fhx_agorp_10years
+    - fhx_socpp_baseline
+    - fhx_socpp_4years
+    - fhx_socpp_10years
+    - fhx_simp_baseline
+    - fhx_simp_4years
+    - fhx_simp_10years
+    - fhx_ocdp_baseline
+    - fhx_ocdp_4years
+    - fhx_ocdp_10years
+    - fhx_gadp_baseline
+    - fhx_gadp_4years
+    - fhx_gadp_10years
+    - fhx_ovrp_baseline
+    - fhx_ovrp_4years
+    - fhx_ovrp_10years
+    - fhx_sepp_baseline
+    - fhx_sepp_4years
+    - fhx_sepp_10years
+    - fhx_avdp_baseline
+    - fhx_avdp_4years
+    - fhx_avdp_10years
+    - fhx_ptsdp_baseline
+    - fhx_ptsdp_4years
+    - fhx_ptsdp_10years
+    - fhx_bpdp_baseline
+    - fhx_bpdp_4years
+    - fhx_bpdp_10years
+    - fhx_adhdp_baseline
+    - fhx_adhdp_4years
+    - fhx_adhdp_10years
+    - fhx_manxp01_10years
+    - fhx_manxp01_4years
+    - fhx_manxp01_baseline
+    - fhx_sud_10years
+    - fhx_sud_4years
+    - fhx_sud_baseline
+    - manxp01_lifetime_10years
+    - manxp01_lifetime_4years
+    - manxp01_lifetime_baseline
+    - sud_lifetime_10years
+    - sud_lifetime_4years
+    - sud_lifetime_baseline
+
+  ordinal:
+    - saic1_baseline
+    - saic1_4years
+    - saic1_10years
+    - saic2_baseline
+    - saic2_4years
+    - saic2_10years
+    - saic3_baseline
+    - saic3_4years
+    - saic3_10years
+    - saic4_baseline
+    - saic4_4years
+    - saic4_10years
+    - saic5_baseline
+    - saic5_4years
+    - saic5_10years
+    - saic8_baseline
+    - saic8_4years
+    - saic8_10years
+    - saic9_baseline
+    - saic9_4years
+    - saic9_10years
+    - saic10_baseline
+    - saic10_4years
+    - saic10_10years
+    - saic11_baseline
+    - saic11_4years
+    - saic11_10years
+    - saic12_baseline
+    - saic12_4years
+    - saic12_10years
+    - ses_baseline
+    - ses_4years
+    - ses_10years
+    - mdd_baseline
+    - mdd_4years
+    - mdd_10years
+    - bpd_baseline
+    - bpd_4years
+    - bpd_10years
+    - rgrdp_lifetime_baseline
+    - rgrdp_lifetime_4years
+    - rgrdp_lifetime_10years
+    - spclp_lifetime_baseline
+    - spclp_lifetime_4years
+    - spclp_lifetime_10years
+    - exhpp_lifetime_baseline
+    - exhpp_lifetime_4years
+    - exhpp_lifetime_10years
+    - alabp_lifetime_baseline
+    - alabp_lifetime_4years
+    - alabp_lifetime_10years
+    - aldpp_lifetime_baseline
+    - aldpp_lifetime_4years
+    - aldpp_lifetime_10years
+    - sbabp_lifetime_baseline
+    - sbabp_lifetime_4years
+    - sbabp_lifetime_10years
+    - sbdpp_lifetime_baseline
+    - sbdpp_lifetime_4years
+    - sbdpp_lifetime_10years
+    - panp_lifetime_baseline
+    - panp_lifetime_4years
+    - panp_lifetime_10years
+    - agorp_lifetime_baseline
+    - agorp_lifetime_4years
+    - agorp_lifetime_10years
+    - socpp_lifetime_baseline
+    - socpp_lifetime_4years
+    - socpp_lifetime_10years
+    - simp_lifetime_baseline
+    - simp_lifetime_4years
+    - simp_lifetime_10years
+    - ocdp_lifetime_baseline
+    - ocdp_lifetime_4years
+    - ocdp_lifetime_10years
+    - gadp_lifetime_baseline
+    - gadp_lifetime_4years
+    - gadp_lifetime_10years
+    - ovrp_lifetime_baseline
+    - ovrp_lifetime_4years
+    - ovrp_lifetime_10years
+    - sepp_lifetime_baseline
+    - sepp_lifetime_4years
+    - sepp_lifetime_10years
+    - avdp_lifetime_baseline
+    - avdp_lifetime_4years
+    - avdp_lifetime_10years
+    - ptsdp_lifetime_baseline
+    - ptsdp_lifetime_4years
+    - ptsdp_lifetime_10years
+    - adhdp_lifetime_baseline
+    - adhdp_lifetime_4years
+    - adhdp_lifetime_10years
+
+  continuous:
+    - extert_baseline
+    - extert_4years
+    - extert_10years
+    - intert_baseline
+    - intert_4years
+    - intert_10years
+    - totalt_baseline
+    - totalt_4years
+    - totalt_10years
+    - aggret_baseline
+    - aggret_4years
+    - aggret_10years
+    - delnqt_baseline
+    - delnqt_4years
+    - delnqt_10years
+    - attent_baseline
+    - attent_4years
+    - attent_10years
+    - thougt_baseline
+    - thougt_4years
+    - thougt_10years
+    - socprot_baseline
+    - socprot_4years
+    - socprot_10years
+    - anxdept_baseline
+    - anxdept_4years
+    - anxdept_10years
+    - somat_baseline
+    - somat_4years
+    - somat_10years
+    - withdt_baseline
+    - withdt_4years
+    - withdt_10years
+    - tott_baseline
+    - tott_4years
+    - tott_10years
+    - scht_baseline
+    - scht_4years
+    - scht_10years
+    - soct_baseline
+    - soct_4years
+    - soct_10years
+    - actt_baseline
+    - actt_4years
+    - actt_10years
+    - block_design_ss_baseline
+    - block_design_ss_4years
+    - block_design_ss_10years
+    - digit_span_ss_baseline
+    - digit_span_ss_4years
+    - digit_span_ss_10years
+    - digit_symbol_ss_baseline
+    - digit_symbol_ss_4years
+    - digit_symbol_ss_10years
+    - vocab_ss_baseline
+    - vocab_ss_4years
+    - vocab_ss_10years
+    - arithmetic_ss_baseline
+    - arithmetic_ss_4years
+    - arithmetic_ss_10years
+    - full_iq_baseline
+    - full_iq_4years
+    - full_iq_10years
+    - aaa_4years
+    - aaa_10years
+    - aaa_baseline
+
+  discrete:
+    - age_baseline
+    - age_4years
+    - age_10years
+    - bpdp_baseline
+    - bpdp_4years
+    - bpdp_10years
