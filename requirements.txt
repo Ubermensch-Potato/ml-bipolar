@@ -19,3 +19,6 @@ optuna==4.9.0             # per-fold HP tuning
 tabpfn==8.0.8
 torch==2.11.0
 huggingface-hub==1.14.0   # download the gated tabpfn_3 checkpoint
+
+# --- figures (eval/plot_importance.py) ---
+matplotlib==3.10.7

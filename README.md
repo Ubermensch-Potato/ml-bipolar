@@ -284,6 +284,43 @@ To reproduce this table, run the three commands in [Section 4](#4-running) and r
 
 ---
 
+## 7.5 Feature importance
+
+Per-fold feature importance for every (model, strategy), rebuilt from the `hp` recorded
+in `<prefix>_folds.csv` (no Optuna re-run) — each rebuilt model's test AUC is asserted
+to equal the stored AUC, so a bad reconstruction aborts the run.
+
+Each model family uses its natural measure; TabPFN has none, so it uses permutation:
+
+| model | measure |
+|---|---|
+| LR L1 / L2 | `coef_` (signed) |
+| XGBoost | gain |
+| BalancedRF | Gini importance |
+| TabPFN | permutation importance = drop in test AUC when a feature is shuffled |
+
+Units differ across families, so **compare ranks, not magnitudes**. Direction (bar side /
+colour) is the sign of the feature's correlation with conversion on the training folds —
+descriptive, not causal.
+
+```bash
+# native importances for LR / XGBoost / BalancedRF (no torch)
+python -m eval.run_importance --folds outputs/models_spec_at_sens_folds.csv
+# TabPFN permutation importance, SEPARATE process (n_repeats shuffles per feature)
+python -m eval.run_importance_tabpfn --folds outputs/tabpfn_spec_at_sens_folds.csv --n-repeats 3
+# figures + machine-readable top features
+python -m eval.plot_importance \
+  --imp outputs/models_spec_at_sens_importance.csv outputs/tabpfn_spec_at_sens_importance.csv
+```
+
+Writes to `outputs/figures/` (git-ignored): one `imp_<model>_<strategy>.png` per combo,
+a cross-combo `imp_heatmap.png`, `importance_summary.csv`, and `top_features.json`
+(per-combo top-K plus a `consensus` ranking = in how many combos each feature reaches the
+top-K). On this cohort the consensus is led by `saic1_baseline` (top-20 in all 20 combos,
+mean rank ~3), followed by `age_baseline`, `adhdp_lifetime_baseline`, and `mdd_baseline`.
+
+---
+
 ## 8. Outputs (`outputs/`)
 
 | file | contents |
