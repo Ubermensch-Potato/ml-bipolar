@@ -26,13 +26,15 @@ from sklearn.metrics import roc_auc_score
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # ml_code/ on path
 from data.loader import data_load
-from utils.paths import OUTPUTS as OUT, CONFIG as CONFIG_PATH
+from utils.paths import OUTPUTS as OUT, CONFIG as CONFIG_PATH, resolve_data_path
 from utils.metrics import (select_threshold as _thr, sens_spec as _ss,
                            sens_at_spec as _sens_at_spec, spec_at_sens as _spec_at_sens)
 # ---- model-specific imports ----
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score
 from data.pipeline import get_pipeline
+
+MODELS = ["LR_L1", "LR_L2", "XGBoost", "BalancedRF"]   # TabPFN -> train/run_tabpfn.py
 
 
 # ======================= model-specific: HP search + build =======================
@@ -76,7 +78,7 @@ def model_specs(seed, neg, pos):
     }
 
 
-def build(spec, strat, X, pp, seed, extra=None):
+def build(spec, strat, X, pp, seed, smote_param, extra=None):
     params = dict(spec["base"])
     if extra:
         params.update(extra)
@@ -87,11 +89,11 @@ def build(spec, strat, X, pp, seed, extra=None):
     else:
         sampler = {"method": strat, "random_state": seed}
         if strat == "smote_enn":
-            sampler["smote_param"] = {"sampling_strategy": 0.7, "k_neighbors": 5, "random_state": seed}
+            sampler["smote_param"] = {**smote_param, "random_state": seed}
     return get_pipeline(spec["cls"], params, pp, X_for_categories=X, sampler_params=sampler, random_state=seed)
 
 
-def tune_hp(spec, strat, X, y, pp, seed, tr, va, n_trials, obj="spec_at_sens"):
+def tune_hp(spec, strat, X, y, pp, seed, smote_param, tr, va, n_trials, obj, min_sens):
     """Per-fold Optuna over sklearn HP on the valid holdout (obj = spec@sens / sens@spec / accuracy)."""
     space = spec.get("space")
     if not space or n_trials <= 0:
@@ -103,11 +105,11 @@ def tune_hp(spec, strat, X, y, pp, seed, tr, va, n_trials, obj="spec_at_sens"):
     def objective(t):
         hp = {n: _suggest(t, n, s) for n, s in space.items()}
         try:
-            pipe = build(spec, strat, X, pp, seed, extra=hp).fit(Xtr, ytr)
+            pipe = build(spec, strat, X, pp, seed, smote_param, extra=hp).fit(Xtr, ytr)
             if obj == "accuracy":
                 return accuracy_score(yva.values, pipe.predict(Xva))
             if obj == "spec_at_sens":
-                return _spec_at_sens(yva.values, pipe.predict_proba(Xva)[:, 1], 0.75)
+                return _spec_at_sens(yva.values, pipe.predict_proba(Xva)[:, 1], min_sens)
             return _sens_at_spec(yva.values, pipe.predict_proba(Xva)[:, 1], 0.5)
         except Exception:
             return 0.0
@@ -119,6 +121,8 @@ def tune_hp(spec, strat, X, y, pp, seed, tr, va, n_trials, obj="spec_at_sens"):
 
 # ======================= shared: write outputs (IDENTICAL in run_tabpfn.py) =======================
 def write_outputs(a, folds, preds):
+    if not folds:
+        print("every fold failed — no results to write"); return
     fdf = pd.DataFrame(folds)
     pd.DataFrame(preds).to_csv(os.path.join(OUT, f"{a.prefix}_predictions.csv"), index=False)
     fdf.to_csv(os.path.join(OUT, f"{a.prefix}_folds.csv"), index=False)
@@ -150,14 +154,20 @@ def main():
     ap.add_argument("--prefix", default="models", help="output filename prefix")
     ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens", "accuracy"], default="spec_at_sens",
                     help="Optuna objective: spec@sens>=0.75 (main) / sens@spec>=0.5 / accuracy (sophie)")
-    ap.add_argument("--models", nargs="*", default=["LR_L1", "LR_L2", "XGBoost", "BalancedRF"])
+    ap.add_argument("--models", nargs="*", choices=MODELS, default=MODELS)
     a = ap.parse_args()
 
     # ---- data ----
-    cfg = yaml.safe_load(open(CONFIG_PATH)); seed = 67; c = cfg["columns"]
-    X, y = data_load(cfg["data"]["path"], label_column="bpdp_10years", is_binary_classification=True)
+    cfg = yaml.safe_load(open(CONFIG_PATH)); seed = int(cfg.get("seed", 67)); c = cfg["columns"]
+    d = cfg["data"]
+    X, y = data_load(resolve_data_path(d["path"]), label_column=d["label_column"],
+                     is_binary_classification=d["is_binary_classification"],
+                     nan_subject_level_threshold=d["nan_subject_level_threshold"],
+                     nan_feature_level_threshold=d["nan_feature_level_threshold"])
     pp = {"binary_cols": c["binary"], "ordinal_cols": c["ordinal"], "continuous_cols": c["continuous"],
           "discrete_cols": c["discrete"], "random_state": seed}
+    smote_param = dict(cfg["sampler"]["smote_param"])          # shared with run_tabpfn.py
+    min_sens = float(cfg["threshold"]["min_target_sensitivity"])
 
     # ---- model setup (model-specific) ----
     pos = int((y == 1).sum()); neg = int((y == 0).sum())
@@ -166,9 +176,10 @@ def main():
 
     def _fold(mname, strat, tr, va, test):
         spec = specs[mname]
-        best_hp = tune_hp(spec, strat, X, y, pp, seed, tr, va, a.trials, a.objective) if a.tune else {}
-        pipe = build(spec, strat, X, pp, seed, extra=best_hp).fit(X.iloc[tr], y.iloc[tr])
-        tau = _thr(y.iloc[va].values, pipe.predict_proba(X.iloc[va])[:, 1])
+        best_hp = tune_hp(spec, strat, X, y, pp, seed, smote_param, tr, va,
+                          a.trials, a.objective, min_sens) if a.tune else {}
+        pipe = build(spec, strat, X, pp, seed, smote_param, extra=best_hp).fit(X.iloc[tr], y.iloc[tr])
+        tau = _thr(y.iloc[va].values, pipe.predict_proba(X.iloc[va])[:, 1], min_sens)
         prob = pipe.predict_proba(X.iloc[test])[:, 1]
         return prob, tau, best_hp
 

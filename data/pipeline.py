@@ -38,8 +38,9 @@ def get_pipeline(model_class, model_params, preprocessor_params, X_for_categorie
         sampler = SMOTETomek(**s_params)
 
     else:
-        # For other methods, use the CustomSampler factory to build a real imblearn sampler (or None)
-        sampler = CustomSampler(**sampler_params)._get_sampler()
+        # For other methods, use the CustomSampler factory to build a real imblearn sampler (or None).
+        # Use s_params (not sampler_params) so get_pipeline's random_state reaches the sampler.
+        sampler = CustomSampler(**s_params)._get_sampler()
 
     steps = [("scaler", CustomPreprocessor(**preprocessor_params,
                                            X_for_categories=X_for_categories))]

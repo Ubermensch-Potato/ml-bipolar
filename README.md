@@ -8,7 +8,9 @@ Fully reproducible under **seed 67**.
 - **Cohort**: N=160 (43 positive / 117 negative, ~27% imbalance), label `bpdp_10years`.
 - **Models**: LR (L1 / L2), XGBoost, BalancedRandomForest, TabPFN-3.
 - **Imbalance strategies**: `weight` (model-native weighting) / `smote` / `adasyn` /
-  `smote_enn` / `builtin` (model's internal handling).
+  `smote_enn` / `builtin` (model's internal handling). `smote_enn`'s inner SMOTE reads
+  `sampler.smote_param` from `config.yaml` (`sampling_strategy: 0.7`) in **both** runners, so
+  the cross-model comparison is not confounded by different oversampling ratios.
 - **Protocol**: every fold splits into **train / valid / test** — HP and the decision
   threshold are chosen on **valid**, the test fold is predicted **independently**.
 
@@ -53,6 +55,13 @@ conda activate bipolar-ml
 
 Key packages: `scikit-learn 1.8`, `xgboost 3.2`, `imbalanced-learn 0.14`, `optuna 4.9`,
 `tabpfn 8.0.8` + `torch 2.11` + `huggingface-hub` (to download the TabPFN weights).
+
+**Dataset.** The patient data is distributed separately (not in this repo). Point the code at it
+either by editing `data.path` in `config.yaml` (absolute, or relative to `ml-bipolar/`) or by
+exporting an override:
+```bash
+export BIPOLAR_DATA_PATH=/abs/path/to/bipolar_dataset.xlsx
+```
 
 ---
 

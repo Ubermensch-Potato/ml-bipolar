@@ -4,55 +4,42 @@
 # (LogReg1_BPD_SMOTEENN.ipynb).
 # =============================================================================
 
-seed: 67   # SEED / random_state — global reproducibility
+seed: 67   # USED — SEED / random_state, global reproducibility
 
-data:
-  # Local data path (instead of the Colab Drive path). Absolute or relative.
-  path: /Users/spinai_dev/Desktop/TIM/GunAhn/QASIM/Bipolar-LLM/dataset/bipolar_dataset.xlsx
+data:                # USED by data_load() in both train/ runners
+  # Absolute, or relative to ml_code/. $BIPOLAR_DATA_PATH overrides this.
+  path: dataset/bipolar_dataset.xlsx   # relative to ml_code/; or export BIPOLAR_DATA_PATH
   label_column: bpdp_10years          # 'bpdp_4years' or 'bpdp_10years'
   is_binary_classification: true
   nan_subject_level_threshold: 0.3    # drop a subject if >30% of its features are missing
   nan_feature_level_threshold: 0.3    # drop a feature if >30% of subjects are missing it
 
-split:
-  test_size: 0.3        # train_test_split test_size (stratify=y)
-
-sampler:
+sampler:             # USED — smote_param feeds the 'smote_enn' strategy in BOTH runners
   method: smote_enn
   smote_param:
     sampling_strategy: 0.7
     k_neighbors: 5
 
-model:                  # LogisticRegression fixed params (C is searched by Optuna)
-  penalty: l1
-  solver: saga
-  max_iter: 1000
-  class_weight: balanced
-  c_override: null      # if set (e.g. 1.0457), skip Optuna and use this C directly
-
-optuna:
-  n_trials: 100
-  direction: maximize
-  metric: accuracy      # CV metric the objective maximizes
-  c_low: 0.0001         # C search lower bound (log uniform)
-  c_high: 10.0          # C search upper bound
-  cv_splits: 5          # StratifiedKFold n_splits
-  pruner_warmup: 3      # MedianPruner n_warmup_steps
-
-cv:                     # final out-of-fold prediction scheme (recorded per-prediction)
-  n_splits: 5           # StratifiedKFold folds; repeat 0 reproduces the single-pass result
-  n_repeats: 1          # set >1 for RepeatedStratifiedKFold -> n_repeats predictions per subject
-
-calibration:
-  method: sigmoid       # CalibratedClassifierCV method
-
-threshold:
+threshold:           # USED — deployment threshold rule (utils/metrics.select_threshold)
   min_target_sensitivity: 0.75   # maximize specificity at/above this sensitivity, else Youden's J
-  fixed: null                    # if set (e.g. 0.6102), use this threshold directly instead of selecting
 
-evaluation:
-  bootstrap_n: 1000     # bootstrap resamples for the AUC confidence interval
-  confidence: 0.95
+# -----------------------------------------------------------------------------
+# The keys below belong to sophie's original notebook flow and are NOT read by
+# this package's runners (they tune HP per fold via CLI flags instead). Kept for
+# provenance only -- editing them changes nothing.
+# -----------------------------------------------------------------------------
+_notebook_only:
+  split: {test_size: 0.3}
+  model: {penalty: l1, solver: saga, max_iter: 1000, class_weight: balanced, c_override: null}
+  optuna: {n_trials: 100, direction: maximize, metric: accuracy, c_low: 0.0001, c_high: 10.0,
+           cv_splits: 5, pruner_warmup: 3}
+  cv: {n_splits: 5, n_repeats: 1}
+  calibration: {method: sigmoid}
+  threshold_fixed: null
+
+evaluation:          # USED by eval/run_ci.py
+  bootstrap_n: 2000     # bootstrap resamples for the AUC confidence interval
+  confidence: 0.95      # (Wilson uses z=1.96; change utils/metrics.py to vary it)
 
 output:
   dir: outputs                       # relative to py_codes/

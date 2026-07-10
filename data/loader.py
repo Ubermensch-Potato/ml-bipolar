@@ -34,7 +34,9 @@ def data_load(data_path, label_column="bpdp_4years", is_binary_classification=Fa
 
     y = mdd_baseline_data[label_column]
     mdd_baseline_data = mdd_baseline_data[~y.isna().values]
-    y = y[~y.isna()].astype("int64")
+    # reset_index so y stays positionally aligned with x/uid below; without it the
+    # boolean subject_mask (indexed 0..M-1) cannot align when NaN labels were dropped.
+    y = y[~y.isna()].astype("int64").reset_index(drop=True)
 
     # Exclusion: columns ending in _4years / _10years + identifiers + single-value column
     excluded_columns = ["id", "famid", "bpdp_baseline"]

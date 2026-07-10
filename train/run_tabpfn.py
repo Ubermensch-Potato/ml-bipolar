@@ -27,7 +27,7 @@ from sklearn.metrics import roc_auc_score
 import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))   # ml_code/ on path
 from data.loader import data_load
-from utils.paths import OUTPUTS as OUT, CONFIG as CONFIG_PATH, TABPFN_CKPT
+from utils.paths import OUTPUTS as OUT, CONFIG as CONFIG_PATH, TABPFN_CKPT, resolve_data_path
 from utils.metrics import (select_threshold as _thr, sens_spec as _ss,
                            sens_at_spec as _sens_at_spec, spec_at_sens as _spec_at_sens)
 # ---- model-specific imports ----
@@ -35,21 +35,29 @@ from sklearn.impute import SimpleImputer
 from data.preprocessor import CustomPreprocessor
 from tabpfn import TabPFNClassifier
 
+STRATEGIES = ["builtin", "smote", "adasyn", "smote_enn"]
+
 
 # ======================= model-specific: sampler + HP search =======================
-def _sampler(method, seed):
-    """Over-sampler applied to the preprocessed TRAIN fold (None = no sampling)."""
+def _sampler(method, seed, smote_param):
+    """Over-sampler applied to the preprocessed TRAIN fold (None = no sampling).
+
+    smote_param comes from config.yaml so 'smote_enn' resamples IDENTICALLY to run_models.py
+    (which builds its inner SMOTE from the same config); otherwise the two runners would
+    oversample the minority to different ratios and the cross-model comparison is confounded.
+    """
     if method in (None, "builtin", "none"):
         return None
     from imblearn.over_sampling import SMOTE, ADASYN
     from imblearn.combine import SMOTEENN
     if method == "smote": return SMOTE(k_neighbors=5, random_state=seed)
     if method == "adasyn": return ADASYN(random_state=seed)
-    if method == "smote_enn": return SMOTEENN(smote=SMOTE(k_neighbors=5, random_state=seed), random_state=seed)
+    if method == "smote_enn":
+        return SMOTEENN(smote=SMOTE(**smote_param, random_state=seed), random_state=seed)
     raise ValueError(f"unknown strategy '{method}'")
 
 
-def tune_tabpfn(clf, Xtr, ytr, Xva, yva, seed, n_trials, obj="spec_at_sens"):
+def tune_tabpfn(clf, Xtr, ytr, Xva, yva, seed, n_trials, obj, min_sens):
     """Per-fold Optuna over TabPFN inference settings via set_params, no reload (obj = spec@sens / sens@spec)."""
     if n_trials <= 0:
         return {}
@@ -61,9 +69,12 @@ def tune_tabpfn(clf, Xtr, ytr, Xva, yva, seed, n_trials, obj="spec_at_sens"):
                   softmax_temperature=t.suggest_float("softmax_temperature", 0.5, 1.5),
                   balance_probabilities=t.suggest_categorical("balance_probabilities", [True, False]),
                   average_before_softmax=t.suggest_categorical("average_before_softmax", [True, False]))
-        clf.set_params(**hp).fit(Xtr, ytr)
-        prob = clf.predict_proba(Xva)[:, 1]
-        return _spec_at_sens(yva, prob, 0.75) if obj == "spec_at_sens" else _sens_at_spec(yva, prob, 0.5)
+        try:
+            clf.set_params(**hp).fit(Xtr, ytr)
+            prob = clf.predict_proba(Xva)[:, 1]
+        except Exception:
+            return 0.0          # a bad trial scores 0 instead of killing the whole fold
+        return _spec_at_sens(yva, prob, min_sens) if obj == "spec_at_sens" else _sens_at_spec(yva, prob, 0.5)
 
     study = optuna.create_study(direction="maximize", sampler=optuna.samplers.TPESampler(seed=seed))
     study.optimize(objective, n_trials=n_trials, show_progress_bar=False)
@@ -72,6 +83,8 @@ def tune_tabpfn(clf, Xtr, ytr, Xva, yva, seed, n_trials, obj="spec_at_sens"):
 
 # ======================= shared: write outputs (IDENTICAL in run_models.py) =======================
 def write_outputs(a, folds, preds):
+    if not folds:
+        print("every fold failed — no results to write"); return
     fdf = pd.DataFrame(folds)
     pd.DataFrame(preds).to_csv(os.path.join(OUT, f"{a.prefix}_predictions.csv"), index=False)
     fdf.to_csv(os.path.join(OUT, f"{a.prefix}_folds.csv"), index=False)
@@ -103,17 +116,23 @@ def main():
     ap.add_argument("--prefix", default="tabpfn_tuned", help="output filename prefix")
     ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens"], default="spec_at_sens",
                     help="Optuna objective: spec@sens>=0.75 (main) / sens@spec>=0.5")
-    ap.add_argument("--strategies", nargs="*", default=["builtin"],
+    ap.add_argument("--strategies", nargs="*", choices=STRATEGIES, default=["builtin"],
                     help="builtin (no sampling) and/or smote / adasyn / smote_enn")
     ap.add_argument("--raw", action="store_true",
                     help="feed RAW features + categorical_features_indices (no one-hot; TabPFN native)")
     a = ap.parse_args()
 
     # ---- data ----
-    cfg = yaml.safe_load(open(CONFIG_PATH)); seed = 67; c = cfg["columns"]
-    X, y = data_load(cfg["data"]["path"], label_column="bpdp_10years", is_binary_classification=True)
+    cfg = yaml.safe_load(open(CONFIG_PATH)); seed = int(cfg.get("seed", 67)); c = cfg["columns"]
+    d = cfg["data"]
+    X, y = data_load(resolve_data_path(d["path"]), label_column=d["label_column"],
+                     is_binary_classification=d["is_binary_classification"],
+                     nan_subject_level_threshold=d["nan_subject_level_threshold"],
+                     nan_feature_level_threshold=d["nan_feature_level_threshold"])
     pp = {"binary_cols": c["binary"], "ordinal_cols": c["ordinal"], "continuous_cols": c["continuous"],
           "discrete_cols": c["discrete"], "random_state": seed}
+    smote_param = dict(cfg["sampler"]["smote_param"])          # shared with run_models.py
+    min_sens = float(cfg["threshold"]["min_target_sensitivity"])
 
     # ---- model setup (model-specific) ----
     clf = TabPFNClassifier(model_path=TABPFN_CKPT, device="cpu")   # loaded ONCE, reused
@@ -142,13 +161,14 @@ def main():
     def _fold(mname, strat, tr, va, test):
         Xtr, Xva, Xte = _preprocess(tr, va, test)
         ytr = y.iloc[tr].values
-        samp = _sampler(strat, seed)
+        samp = _sampler(strat, seed, smote_param)
         if samp is not None:                                       # resample TRAIN only
             Xtr, ytr = samp.fit_resample(Xtr, ytr)
             Xtr = np.asarray(Xtr, dtype=np.float32); ytr = np.asarray(ytr).astype(int)
-        best_hp = tune_tabpfn(clf, Xtr, ytr, Xva, y.iloc[va].values, seed, a.trials, a.objective) if a.tune else {}
+        best_hp = tune_tabpfn(clf, Xtr, ytr, Xva, y.iloc[va].values, seed,
+                              a.trials, a.objective, min_sens) if a.tune else {}
         clf.set_params(**best_hp).fit(Xtr, ytr)
-        tau = _thr(y.iloc[va].values, clf.predict_proba(Xva)[:, 1])
+        tau = _thr(y.iloc[va].values, clf.predict_proba(Xva)[:, 1], min_sens)
         prob = clf.predict_proba(Xte)[:, 1]
         del Xtr, Xva, Xte; gc.collect()
         return prob, tau, best_hp
