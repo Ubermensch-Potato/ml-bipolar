@@ -231,7 +231,56 @@ seed = 67 everywhere -> reproducible
 
 ---
 
-## 7. Outputs (`outputs/`)
+## 7. Results (main objective `spec_at_sens`)
+
+Subject-level, **N = 160**. Each cell is `point [95% CI]` — Wilson for the proportions,
+bootstrap (2000 resamples) for AUC. Sorted by AUC. Seed 67, 5x5 unbiased CV, 12 Optuna
+trials per fold.
+
+| # | model:strategy | Sensitivity | Specificity | Accuracy | AUC | spec ≥ 0.5 |
+|--:|---|---|---|---|---|:--:|
+| 1 | `LR_L1:smote_enn` | 0.860 [0.73, 0.93] | 0.479 [0.39, 0.57] | 0.581 [0.50, 0.65] | 0.754 [0.66, 0.84] | ❌ |
+| 2 | `LR_L2:weight` | 0.791 [0.65, 0.89] | 0.590 [0.50, 0.67] | 0.644 [0.57, 0.71] | 0.743 [0.65, 0.82] | ✅ |
+| 3 | `LR_L1:weight` | 0.744 [0.60, 0.85] | 0.538 [0.45, 0.63] | 0.594 [0.52, 0.67] | 0.742 [0.65, 0.83] | ✅ |
+| 4 | `LR_L1:adasyn` | 0.767 [0.62, 0.87] | 0.538 [0.45, 0.63] | 0.600 [0.52, 0.67] | 0.737 [0.64, 0.82] | ✅ |
+| 5 | `XGBoost:smote` | 0.767 [0.62, 0.87] | 0.632 [0.54, 0.71] | 0.669 [0.59, 0.74] | 0.736 [0.64, 0.83] | ✅ |
+| 6 | `TabPFN:smote_enn` | 0.767 [0.62, 0.87] | 0.564 [0.47, 0.65] | 0.619 [0.54, 0.69] | 0.735 [0.64, 0.82] | ✅ |
+| 7 | `LR_L2:smote_enn` | 0.814 [0.67, 0.90] | 0.521 [0.43, 0.61] | 0.600 [0.52, 0.67] | 0.734 [0.65, 0.81] | ✅ |
+| 8 | `LR_L2:adasyn` | 0.791 [0.65, 0.89] | 0.590 [0.50, 0.67] | 0.644 [0.57, 0.71] | 0.730 [0.64, 0.81] | ✅ |
+| 9 | `BalancedRF:adasyn` | 0.744 [0.60, 0.85] | 0.573 [0.48, 0.66] | 0.619 [0.54, 0.69] | 0.730 [0.64, 0.81] | ✅ |
+| 10 | `BalancedRF:smote` | 0.791 [0.65, 0.89] | 0.624 [0.53, 0.71] | 0.669 [0.59, 0.74] | 0.720 [0.63, 0.80] | ✅ |
+| 11 | `LR_L2:smote` | 0.721 [0.57, 0.83] | 0.607 [0.52, 0.69] | 0.637 [0.56, 0.71] | 0.718 [0.62, 0.80] | ✅ |
+| 12 | `LR_L1:smote` | 0.744 [0.60, 0.85] | 0.547 [0.46, 0.63] | 0.600 [0.52, 0.67] | 0.716 [0.62, 0.80] | ✅ |
+| 13 | `BalancedRF:builtin` | 0.721 [0.57, 0.83] | 0.564 [0.47, 0.65] | 0.606 [0.53, 0.68] | 0.712 [0.62, 0.80] | ✅ |
+| 14 | `XGBoost:adasyn` | 0.721 [0.57, 0.83] | 0.590 [0.50, 0.67] | 0.625 [0.55, 0.70] | 0.709 [0.61, 0.80] | ✅ |
+| 15 | `BalancedRF:smote_enn` | 0.791 [0.65, 0.89] | 0.538 [0.45, 0.63] | 0.606 [0.53, 0.68] | 0.706 [0.61, 0.79] | ✅ |
+| 16 | `XGBoost:weight` | 0.744 [0.60, 0.85] | 0.598 [0.51, 0.68] | 0.637 [0.56, 0.71] | 0.703 [0.61, 0.79] | ✅ |
+| 17 | `TabPFN:smote` | 0.767 [0.62, 0.87] | 0.496 [0.41, 0.59] | 0.569 [0.49, 0.64] | 0.702 [0.61, 0.79] | ❌ |
+| 18 | `XGBoost:smote_enn` | 0.721 [0.57, 0.83] | 0.521 [0.43, 0.61] | 0.575 [0.50, 0.65] | 0.700 [0.60, 0.79] | ✅ |
+| 19 | `TabPFN:adasyn` | 0.814 [0.67, 0.90] | 0.504 [0.41, 0.59] | 0.588 [0.51, 0.66] | 0.694 [0.60, 0.79] | ✅ |
+| 20 | `TabPFN:builtin` | 0.791 [0.65, 0.89] | 0.444 [0.36, 0.53] | 0.537 [0.46, 0.61] | 0.654 [0.55, 0.75] | ❌ |
+
+**17 / 20** combinations clear the specificity >= 0.5 constraint; mean AUC **0.719**.
+
+Reading the table:
+
+- The top-AUC combination (`LR_L1:smote_enn`, AUC 0.754) **fails** the specificity
+  constraint — it buys sensitivity 0.860 at specificity 0.479. Ranking quality (AUC) and
+  the deployment constraint disagree, which is why the constraint is reported alongside.
+- Deployable candidates: **`LR_L2:weight`** (AUC 0.743, spec 0.590) is the most stable
+  across both objectives; **`XGBoost:smote`** (spec 0.632, acc 0.669) and
+  **`BalancedRF:smote`** (spec 0.624, acc 0.669) give the best specificity/accuracy.
+- **All CIs overlap heavily.** At N=160 no model is statistically separable from the
+  others — treat the ranking as indicative, not as a winner.
+- Regularized **logistic regression is at least as good as the trees and TabPFN** here,
+  which is what one expects with 160 subjects and 68 features.
+
+To reproduce this table, run the three commands in [Section 4](#4-running) and read
+`outputs/models_spec_at_sens_ci.csv` + `outputs/tabpfn_spec_at_sens_ci.csv`.
+
+---
+
+## 8. Outputs (`outputs/`)
 
 | file | contents |
 |------|----------|
@@ -242,7 +291,7 @@ seed = 67 everywhere -> reproducible
 
 ---
 
-## 8. Reproducibility
+## 9. Reproducibility
 
 - **seed 67** everywhere: `random_state` of LR (saga) / XGBoost / BalancedRF, Optuna
   `TPESampler`, SMOTE/ADASYN/SMOTE-ENN, and the bootstrap `default_rng`.
@@ -252,7 +301,7 @@ seed = 67 everywhere -> reproducible
 
 ---
 
-## 9. Notes
+## 10. Notes
 
 - **`KMP_DUPLICATE_LIB_OK=TRUE`** — avoids a macOS segfault when XGBoost (libomp) and torch
   are loaded in the same process.
