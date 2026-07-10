@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# envs
+venv/
+.venv/
+env/
+
+# TabPFN checkpoint (large, gated — download via download_tabpfn.py)
+tabpfn_models
+*.ckpt
+
+# HuggingFace cache
+.cache/
+
+# run outputs
+outputs/
+
+# dataset (sensitive patient data — distribute separately)
+dataset/
+
+# macOS / IDE
+.DS_Store
+.vscode/
+.idea/
+*.swp
