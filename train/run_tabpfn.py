@@ -74,7 +74,7 @@ def main():
     ap.add_argument("--prefix", default="tabpfn_tuned")
     ap.add_argument("--raw", action="store_true",
                     help="feed RAW features + categorical_features_indices (no one-hot; TabPFN's native mode)")
-    ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens"], default="sens_at_spec")
+    ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens"], default="spec_at_sens")
     ap.add_argument("--strategies", nargs="*", default=["builtin"],
                     help="builtin (no sampling) and/or smote / adasyn / smote_enn")
     a = ap.parse_args()

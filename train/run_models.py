@@ -128,7 +128,7 @@ def main():
     ap.add_argument("--val-frac", type=float, default=0.2)
     ap.add_argument("--prefix", default="models", help="output filename prefix")
     ap.add_argument("--trials", type=int, default=12, help="per-fold Optuna trials (0 = no tuning)")
-    ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens", "accuracy"], default="sens_at_spec",
+    ap.add_argument("--objective", choices=["sens_at_spec", "spec_at_sens", "accuracy"], default="spec_at_sens",
                     help="Optuna objective: sens@spec>=0.5 / spec@sens>=0.75 (matches threshold rule) / accuracy (sophie)")
     ap.add_argument("--tune", dest="tune", action="store_true", default=True)
     ap.add_argument("--no-tune", dest="tune", action="store_false", help="use fixed HP (no Optuna)")

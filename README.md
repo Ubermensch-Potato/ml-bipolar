@@ -75,38 +75,32 @@ loads this local file via `model_path`, so **no token is needed at run time**.
 ## 4. Running
 
 Run from `ml-bipolar/` in **`python -m` module form** (so package imports resolve).
-This is the **exact sequence used to produce the reported results** — two objectives
-(`sens_at_spec`, `spec_at_sens`), each written under a per-objective prefix.
+The **main objective is `spec_at_sens`** (maximize specificity subject to sensitivity ≥ 0.75
+— it matches the deployment threshold rule and, on this cohort, 18/20 combos clear
+specificity ≥ 0.5 vs 13/20 under `sens_at_spec`).
 
 ```bash
 cd ml-bipolar
 export KMP_DUPLICATE_LIB_OK=TRUE      # avoids the XGBoost(libomp)+torch macOS segfault
 
-# 1) Tabular models — per-fold Optuna (unbiased 5x5), one run per objective
-python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
-  --repeats 5 --trials 12 --objective sens_at_spec --prefix models_sens_at_spec
+# 1) Tabular models — per-fold Optuna (unbiased 5x5)
 python -m train.run_models --models LR_L1 LR_L2 XGBoost BalancedRF \
   --repeats 5 --trials 12 --objective spec_at_sens --prefix models_spec_at_sens
 
 # 2) TabPFN-3 — SEPARATE process (same process as XGBoost segfaults, libomp clash)
 python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
-  --trials 12 --objective sens_at_spec --prefix tabpfn_sens_at_spec
-python -m train.run_tabpfn --strategies builtin smote adasyn smote_enn \
   --trials 12 --objective spec_at_sens --prefix tabpfn_spec_at_sens
 
 # 3) subject-level CI (sens/spec/acc = Wilson, AUC = bootstrap)
-python -m eval.run_ci --pred outputs/models_sens_at_spec_predictions.csv
 python -m eval.run_ci --pred outputs/models_spec_at_sens_predictions.csv
-python -m eval.run_ci --pred outputs/tabpfn_sens_at_spec_predictions.csv
 python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 ```
-> Later, once performance is in, keep only **one** objective — run just the two
-> `*_sens_at_spec` (or `*_spec_at_sens`) commands plus their two CI lines.
 > Direct execution (`python train/run_models.py ...`) also works — each script adds
-> `ml-bipolar/` to `sys.path`.
+> `ml-bipolar/` to `sys.path`. Each prefix yields a `{summary,folds,predictions,ci}.csv` set
+> under `outputs/`.
 >
-> This produces, under `outputs/`, one `{summary,folds,predictions,ci}.csv` set per prefix:
-> `models_sens_at_spec_*`, `models_spec_at_sens_*`, `tabpfn_sens_at_spec_*`, `tabpfn_spec_at_sens_*`.
+> **Alternative objective** — to also produce `sens_at_spec` (max sensitivity s.t. spec ≥ 0.5),
+> rerun the three commands with `--objective sens_at_spec` and prefix `*_sens_at_spec`.
 
 ### `train/run_models.py` options
 | option | default | description |
@@ -114,7 +108,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 | `--models` | all 4 | which models (run TabPFN via `train/run_tabpfn.py`) |
 | `--repeats` | 5 | outer-CV repeats (k=5 fixed → 5×5) |
 | `--trials` | 12 | per-fold Optuna trials (0 = no tuning) |
-| `--objective` | `sens_at_spec` | `sens_at_spec` (sens@spec≥0.5) / `spec_at_sens` (spec@sens≥0.75, matches the threshold rule) / `accuracy` (sophie's original) |
+| `--objective` | `spec_at_sens` | `spec_at_sens` (spec@sens≥0.75, **main**, matches threshold rule) / `sens_at_spec` (sens@spec≥0.5) / `accuracy` (sophie's original) |
 | `--no-tune` | — | run with fixed HP |
 | `--prefix` | `models` | output-file prefix |
 
@@ -123,7 +117,7 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 |--------|---------|-------------|
 | `--strategies` | `builtin` | any of `builtin` / `smote` / `adasyn` / `smote_enn` |
 | `--trials` | 12 | per-fold Optuna trials over TabPFN inference settings |
-| `--objective` | `sens_at_spec` | `sens_at_spec` or `spec_at_sens` |
+| `--objective` | `spec_at_sens` | `spec_at_sens` (**main**) or `sens_at_spec` |
 | `--raw` | off | feed RAW features + `categorical_features_indices` (no one-hot) |
 | `--no-tune` | — | defaults only (no tuning) |
 | `--prefix` | `tabpfn_tuned` | output-file prefix |
@@ -133,9 +127,9 @@ python -m eval.run_ci --pred outputs/tabpfn_spec_at_sens_predictions.csv
 ## 5. Objectives · threshold · CI
 
 - **HP-tuning objective** (`--objective`)
-  - `sens_at_spec` — maximize **sensitivity** subject to specificity ≥ 0.5 (clinical goal).
-  - `spec_at_sens` — maximize **specificity** subject to sensitivity ≥ 0.75 (matches the
-    deployment threshold rule).
+  - `spec_at_sens` — **(main)** maximize **specificity** subject to sensitivity ≥ 0.75;
+    matches the deployment threshold rule and keeps the most combos above spec ≥ 0.5.
+  - `sens_at_spec` — maximize **sensitivity** subject to specificity ≥ 0.5 (alternative).
   - `accuracy` — maximize accuracy at the 0.5 cutoff (**sophie's original**; sacrifices
     specificity under imbalance).
   - *TabPFN* is a frozen prior-fitted network, so it has **no train-time HP**; the tuner
