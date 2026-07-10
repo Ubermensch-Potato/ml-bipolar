@@ -1,7 +1,10 @@
-"""CustomPreprocessor — per-column-type preprocessing transformer (same logic as the notebook).
+"""CustomPreprocessor — per-column-type preprocessing transformer.
 
-- binary + nominal : most-frequent imputation -> OneHotEncoder(drop='first')
+- binary + nominal : most-frequent imputation -> OneHotEncoder(drop='first')   [NOT scaled]
 - ordinal + continuous + discrete : IterativeImputer(BayesianRidge) -> StandardScaler
+
+Only the numeric block is standardized. Every estimator is still fit on the training
+fold alone, so this stays leakage-free.
 """
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
@@ -16,10 +19,13 @@ from sklearn.linear_model import BayesianRidge
 class CustomPreprocessor(BaseEstimator, TransformerMixin):
     """Raw DataFrame -> numeric DataFrame ready for the model.
 
-    X_for_categories: passing the concatenated train+valid DataFrame lets the
-    OneHotEncoder learn all categories up front, so the one-hot column order is
-    stable across splits (this is for category discovery only and does not leak
-    label statistics).
+    X_for_categories: the DataFrame whose column value-sets seed the OneHotEncoder's
+    `categories`, so the one-hot column order is stable across splits. The runners pass
+    the full X here. That is deliberate and not label leakage: the admissible levels of a
+    categorical variable are known a priori from the data dictionary (all 22 one-hot
+    columns are plain binaries), no label or outcome statistic is read, and every
+    estimator below is still fit on the training fold alone. Unseen levels at predict
+    time are absorbed by handle_unknown='ignore'.
     """
 
     def __init__(self, binary_cols=[], nominal_cols=[], ordinal_cols=[],
@@ -81,6 +87,9 @@ class CustomPreprocessor(BaseEstimator, TransformerMixin):
                 random_state=self.random_state,
                 initial_strategy="most_frequent",
             )),
+            # Scale ONLY the numeric block. One-hot columns are left as 0/1 so the L1/L2
+            # penalty (and the sampler's neighbour distances) see them on their natural scale.
+            ("scaler", StandardScaler()),
         ])
 
         transformers = []
@@ -96,10 +105,7 @@ class CustomPreprocessor(BaseEstimator, TransformerMixin):
             sparse_threshold=0.0,  # force dense output -> StandardScaler(with_mean=True) works
         )
 
-        self.preprocessor = Pipeline(steps=[
-            ("preprocess_type", preprocess_by_type),
-            ("scaler", StandardScaler()),
-        ])
+        self.preprocessor = Pipeline(steps=[("preprocess_type", preprocess_by_type)])
         return self.preprocessor
 
     def _build_categories_for_ohe(self, X, norm_binary_cols):

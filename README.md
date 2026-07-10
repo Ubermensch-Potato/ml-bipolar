@@ -25,7 +25,7 @@ ml_code/
 ├── download_tabpfn.py     # download the TabPFN-3 checkpoint (see §3)
 ├── data/                  # data loading + preprocessing pipeline
 │   ├── loader.py          #   data_load, load_subject_meta
-│   ├── preprocessor.py    #   CustomPreprocessor (impute · scale · one-hot)
+│   ├── preprocessor.py    #   CustomPreprocessor (one-hot; impute+scale numeric only)
 │   ├── sampler.py         #   CustomSampler (SMOTE / ADASYN / ...)
 │   └── pipeline.py        #   get_pipeline (preprocessor → sampler → model)
 ├── utils/                 # shared utilities
