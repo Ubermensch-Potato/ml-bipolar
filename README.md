@@ -85,8 +85,8 @@ loads this local file via `model_path`, so **no token is needed at run time**.
 
 Run from `ml-bipolar/` in **`python -m` module form** (so package imports resolve).
 The **main objective is `spec_at_sens`** (maximize specificity subject to sensitivity ≥ 0.75
-— it matches the deployment threshold rule and, on this cohort, 18/20 combos clear
-specificity ≥ 0.5 vs 13/20 under `sens_at_spec`).
+— it matches the deployment threshold rule and, on this cohort, 17/20 combos clear
+specificity ≥ 0.5 vs 12/20 under `sens_at_spec`).
 
 ```bash
 cd ml-bipolar
