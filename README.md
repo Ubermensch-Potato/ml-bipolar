@@ -1,4 +1,4 @@
-# ml_code — Tabular ML benchmark (unbiased 5×5 CV + CI)
+# ml-bipolar — Tabular ML benchmark (unbiased 5×5 CV + CI)
 
 Predict **bipolar-disorder conversion** from adolescent tabular EHR data across several
 tabular ML models × imbalance strategies, evaluated with a **leakage-free (unbiased) 5×5
@@ -19,7 +19,7 @@ Fully reproducible under **seed 67**.
 ## 1. Layout (package hierarchy)
 
 ```
-ml_code/
+ml-bipolar/
 ├── config.yaml            # column-type definitions + dataset path
 ├── requirements.txt       # pinned package versions (Python 3.11)
 ├── download_tabpfn.py     # download the TabPFN-3 checkpoint (see §3)
@@ -29,19 +29,23 @@ ml_code/
 │   ├── sampler.py         #   CustomSampler (SMOTE / ADASYN / ...)
 │   └── pipeline.py        #   get_pipeline (preprocessor → sampler → model)
 ├── utils/                 # shared utilities
-│   ├── paths.py           #   ROOT / CONFIG / OUTPUTS / TABPFN_CKPT
-│   └── metrics.py         #   threshold · sens_at_spec · spec_at_sens · Wilson · bootstrap
+│   ├── paths.py           #   ROOT / CONFIG / OUTPUTS / TABPFN_CKPT / resolve_data_path
+│   ├── metrics.py         #   threshold · sens_at_spec · spec_at_sens · Wilson · bootstrap
+│   └── splits.py          #   reproduce fold splits + preprocessed→raw feature map
 ├── train/                 # training sweeps (entry points)
 │   ├── run_models.py      #   LR · XGBoost · BalancedRF, per-fold Optuna, unbiased 5×5
 │   └── run_tabpfn.py      #   TabPFN-3 (model loaded once + set_params tuning)
 ├── eval/                  # evaluation
-│   └── run_ci.py          #   predictions → subject aggregation (160) → Wilson + bootstrap CI
+│   ├── run_ci.py                # predictions → subject aggregation (160) → Wilson + bootstrap CI
+│   ├── run_importance.py        # LR coef / XGBoost gain / BalancedRF Gini (§7.5)
+│   ├── run_importance_tabpfn.py # TabPFN permutation ΔAUC (separate process)
+│   └── plot_importance.py       # per-combo PNGs + heatmap + top_features.json
 ├── tabpfn_models/         # TabPFN-3 checkpoint (see §3)
-└── outputs/               # result CSVs
+└── outputs/               # result CSVs + figures/ (git-ignored)
 ```
 
-> All paths are resolved from the **ml_code/ root** in `utils/paths.py`, so results always
-> land in `ml_code/outputs/` regardless of which sub-package you launch from.
+> All paths are resolved from the **ml-bipolar/ root** in `utils/paths.py`, so results always
+> land in `ml-bipolar/outputs/` regardless of which sub-package you launch from.
 
 ---
 
